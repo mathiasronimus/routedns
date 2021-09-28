@@ -11,20 +11,6 @@ import (
 func instantiateResolver(id string, r resolver, resolvers map[string]rdns.Resolver) error {
 	var err error
 	switch r.Protocol {
-	case "doq":
-		tlsConfig, err := rdns.TLSClientConfig(r.CA, r.ClientCrt, r.ClientKey)
-		if err != nil {
-			return err
-		}
-		opt := rdns.DoQClientOptions{
-			BootstrapAddr: r.BootstrapAddr,
-			LocalAddr:     net.ParseIP(r.LocalAddr),
-			TLSConfig:     tlsConfig,
-		}
-		resolvers[id], err = rdns.NewDoQClient(id, r.Address, opt)
-		if err != nil {
-			return err
-		}
 	case "dot":
 		tlsConfig, err := rdns.TLSClientConfig(r.CA, r.ClientCrt, r.ClientKey)
 		if err != nil {
@@ -63,7 +49,6 @@ func instantiateResolver(id string, r resolver, resolvers map[string]rdns.Resolv
 			Method:        r.DoH.Method,
 			TLSConfig:     tlsConfig,
 			BootstrapAddr: r.BootstrapAddr,
-			Transport:     r.Transport,
 			LocalAddr:     net.ParseIP(r.LocalAddr),
 		}
 		resolvers[id], err = rdns.NewDoHClient(id, r.Address, opt)

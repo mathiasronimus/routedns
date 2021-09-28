@@ -5,15 +5,12 @@ import (
 	"crypto/tls"
 	"encoding/base64"
 	"expvar"
-	"fmt"
 	"io/ioutil"
 	"net"
 	"net/http"
 	"strings"
 	"time"
 
-	"github.com/lucas-clemente/quic-go"
-	"github.com/lucas-clemente/quic-go/http3"
 	"github.com/miekg/dns"
 	"github.com/sirupsen/logrus"
 )
@@ -24,7 +21,6 @@ const dohServerTimeout = 10 * time.Second
 // DoHListener is a DNS listener/server for DNS-over-HTTPS.
 type DoHListener struct {
 	httpServer *http.Server
-	quicServer *http3.Server
 
 	id   string
 	addr string
@@ -41,9 +37,6 @@ var _ Listener = &DoHListener{}
 // DoHListenerOptions contains options used by the DNS-over-HTTPS server.
 type DoHListenerOptions struct {
 	ListenOptions
-
-	// Transport protocol to run HTTPS over. "quic" or "tcp", defaults to "tcp".
-	Transport string
 
 	TLSConfig *tls.Config
 
@@ -74,15 +67,6 @@ func NewDoHListenerMetrics(id string) *DoHListenerMetrics {
 
 // NewDoHListener returns an instance of a DNS-over-HTTPS listener.
 func NewDoHListener(id, addr string, opt DoHListenerOptions, resolver Resolver) (*DoHListener, error) {
-	switch opt.Transport {
-	case "tcp", "":
-		opt.Transport = "tcp"
-	case "quic":
-		opt.Transport = "quic"
-	default:
-		return nil, fmt.Errorf("unknown protocol: '%s'", opt.Transport)
-	}
-
 	l := &DoHListener{
 		id:      id,
 		addr:    addr,
@@ -98,9 +82,6 @@ func NewDoHListener(id, addr string, opt DoHListenerOptions, resolver Resolver) 
 // Start the DoH server.
 func (s *DoHListener) Start() error {
 	Log.WithFields(logrus.Fields{"id": s.id, "protocol": "doh", "addr": s.addr}).Info("starting listener")
-	if s.opt.Transport == "quic" {
-		return s.startQUIC()
-	}
 	return s.startTCP()
 }
 
@@ -122,27 +103,9 @@ func (s *DoHListener) startTCP() error {
 	return s.httpServer.ServeTLS(ln, "", "")
 }
 
-// Start the DoH server with QUIC transport.
-func (s *DoHListener) startQUIC() error {
-	s.quicServer = &http3.Server{
-		Server: &http.Server{
-			Addr:         s.addr,
-			TLSConfig:    s.opt.TLSConfig,
-			Handler:      s.mux,
-			ReadTimeout:  dohServerTimeout,
-			WriteTimeout: dohServerTimeout,
-		},
-		QuicConfig: &quic.Config{},
-	}
-	return s.quicServer.ListenAndServe()
-}
-
 // Stop the server.
 func (s *DoHListener) Stop() error {
 	Log.WithFields(logrus.Fields{"id": s.id, "protocol": "doh", "addr": s.addr}).Info("stopping listener")
-	if s.opt.Transport == "quic" {
-		return s.quicServer.Close()
-	}
 	return s.httpServer.Shutdown(context.Background())
 }
 

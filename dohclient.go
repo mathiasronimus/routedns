@@ -10,13 +10,10 @@ import (
 	"io/ioutil"
 	"net"
 	"net/http"
-	"net/url"
 	"sync"
 	"time"
 
 	"github.com/jtacoma/uritemplates"
-	"github.com/lucas-clemente/quic-go"
-	"github.com/lucas-clemente/quic-go/http3"
 	"github.com/miekg/dns"
 	"github.com/sirupsen/logrus"
 	"golang.org/x/net/http2"
@@ -30,9 +27,6 @@ type DoHClientOptions struct {
 	// Bootstrap address - IP to use for the service instead of looking up
 	// the service's hostname with potentially plain DNS.
 	BootstrapAddr string
-
-	// Transport protocol to run HTTPS over. "quic" or "tcp", defaults to "tcp".
-	Transport string
 
 	// Local IP to use for outbound connections. If nil, a local address is chosen.
 	LocalAddr net.IP
@@ -59,15 +53,7 @@ func NewDoHClient(id, endpoint string, opt DoHClientOptions) (*DoHClient, error)
 		return nil, err
 	}
 
-	var tr http.RoundTripper
-	switch opt.Transport {
-	case "tcp", "":
-		tr, err = dohTcpTransport(opt)
-	case "quic":
-		tr, err = dohQuicTransport(endpoint, opt)
-	default:
-		err = fmt.Errorf("unknown protocol: '%s'", opt.Transport)
-	}
+	tr, err := dohTcpTransport(opt)
 	if err != nil {
 		return nil, err
 	}
@@ -232,80 +218,6 @@ func dohTcpTransport(opt DoHClientOptions) (http.RoundTripper, error) {
 		}
 	}
 	return tr, nil
-}
-
-func dohQuicTransport(endpoint string, opt DoHClientOptions) (http.RoundTripper, error) {
-	var tlsConfig *tls.Config
-	if opt.TLSConfig == nil {
-		tlsConfig = new(tls.Config)
-	} else {
-		tlsConfig = opt.TLSConfig.Clone()
-	}
-	u, err := url.Parse(endpoint)
-	if err != nil {
-		return nil, err
-	}
-	tlsConfig.ServerName = u.Hostname()
-	lAddr := net.IPv4zero
-	if opt.LocalAddr != nil {
-		lAddr = opt.LocalAddr
-	}
-
-	// When using a custom dialer, we have to track/close connections ourselves
-	pool := new(udpConnPool)
-	dialer := func(network, addr string, tlsConfig *tls.Config, config *quic.Config) (quic.EarlySession, error) {
-		return quicDial(u.Hostname(), addr, lAddr, tlsConfig, config, pool)
-	}
-	if opt.BootstrapAddr != "" {
-		dialer = func(network, addr string, tlsConfig *tls.Config, config *quic.Config) (quic.EarlySession, error) {
-			_, port, err := net.SplitHostPort(addr)
-			if err != nil {
-				return nil, err
-			}
-			addr = net.JoinHostPort(opt.BootstrapAddr, port)
-			return quicDial(u.Hostname(), addr, lAddr, tlsConfig, config, pool)
-		}
-	}
-
-	tr := &http3.RoundTripper{
-		TLSClientConfig: tlsConfig,
-		QuicConfig: &quic.Config{
-			TokenStore: quic.NewLRUTokenStore(10, 10),
-		},
-		Dial: dialer,
-	}
-	return &http3ReliableRoundTripper{tr, pool}, nil
-}
-
-func quicDial(hostname, rAddr string, lAddr net.IP, tlsConfig *tls.Config, config *quic.Config, pool *udpConnPool) (quic.EarlySession, error) {
-	udpAddr, err := net.ResolveUDPAddr("udp", rAddr)
-	if err != nil {
-		return nil, err
-	}
-	udpConn, err := net.ListenUDP("udp", &net.UDPAddr{IP: lAddr, Port: 0})
-	if err != nil {
-		return nil, err
-	}
-	pool.add(udpConn)
-	return quic.DialEarly(udpConn, udpAddr, hostname, tlsConfig, config)
-}
-
-// Wrapper for http3.RoundTripper due to https://github.com/lucas-clemente/quic-go/issues/765
-// This wrapper will transparently re-open expired connections. Should be removed once the issue
-// has been fixed upstream.
-type http3ReliableRoundTripper struct {
-	*http3.RoundTripper
-	pool *udpConnPool
-}
-
-func (r *http3ReliableRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
-	resp, err := r.RoundTripper.RoundTrip(req)
-	if netErr, ok := err.(net.Error); ok && (netErr.Timeout() || netErr.Temporary()) {
-		r.pool.closeAll()
-		r.RoundTripper.Close()
-		resp, err = r.RoundTripper.RoundTrip(req)
-	}
-	return resp, err
 }
 
 // UDP connection pool. Also a workaround for for the http3.RoundTripper. When using a custom

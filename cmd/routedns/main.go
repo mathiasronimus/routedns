@@ -190,7 +190,6 @@ func start(opt options, args []string) error {
 			opt := rdns.AdminListenerOptions{
 				TLSConfig:     tlsConfig,
 				ListenOptions: opt,
-				Transport:     l.Transport,
 			}
 			ln, err := rdns.NewAdminListener(id, l.Address, opt)
 			if err != nil {
@@ -226,20 +225,12 @@ func start(opt options, args []string) error {
 			opt := rdns.DoHListenerOptions{
 				TLSConfig:     tlsConfig,
 				ListenOptions: opt,
-				Transport:     l.Transport,
 				HTTPProxyNet:  httpProxyNet,
 			}
 			ln, err := rdns.NewDoHListener(id, l.Address, opt, resolver)
 			if err != nil {
 				return err
 			}
-			listeners = append(listeners, ln)
-		case "doq":
-			tlsConfig, err := rdns.TLSServerConfig(l.CA, l.ServerCrt, l.ServerKey, l.MutualTLS)
-			if err != nil {
-				return err
-			}
-			ln := rdns.NewQUICListener(id, l.Address, rdns.DoQListenerOptions{TLSConfig: tlsConfig, ListenOptions: opt}, resolver)
 			listeners = append(listeners, ln)
 		default:
 			return fmt.Errorf("unsupported protocol '%s' for listener '%s'", l.Protocol, id)
