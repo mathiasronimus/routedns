@@ -1,4 +1,4 @@
-module github.com/folbricht/routedns
+module github.com/mathiasronimus/routedns
 
 go 1.15
 

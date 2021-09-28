@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"net"
 
-	rdns "github.com/folbricht/routedns"
+	rdns "github.com/mathiasronimus/routedns"
 )
 
 // Instantiates an rdns.Resolver from a resolver config

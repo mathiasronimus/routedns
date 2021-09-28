@@ -8,8 +8,8 @@ import (
 	"os"
 	"time"
 
-	rdns "github.com/folbricht/routedns"
 	"github.com/heimdalr/dag"
+	rdns "github.com/mathiasronimus/routedns"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 )

@@ -7,7 +7,7 @@ import (
 	"os"
 
 	"github.com/BurntSushi/toml"
-	rdns "github.com/folbricht/routedns"
+	rdns "github.com/mathiasronimus/routedns"
 )
 
 type config struct {
