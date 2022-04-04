@@ -3,6 +3,7 @@ package rdns
 import (
 	"crypto/tls"
 	"net"
+	"time"
 
 	"github.com/miekg/dns"
 	"github.com/sirupsen/logrus"
@@ -24,6 +25,9 @@ type DNSClientOptions struct {
 	// Sets the EDNS0 UDP size for all queries sent upstream. If set to 0, queries
 	// are not changed.
 	UDPSize uint16
+
+	// The DialTimeout, ReadTimeout, WriteTimeout for the upstream DNS requests.
+	UpstreamTimeout time.Duration
 }
 
 var _ Resolver = &DNSClient{}
@@ -48,6 +52,7 @@ func NewDNSClient(id, endpoint, network string, opt DNSClientOptions) (*DNSClien
 	client := &dns.Client{
 		Net:       network,
 		Dialer:    dialer,
+		Timeout:   opt.UpstreamTimeout,
 		TLSConfig: &tls.Config{},
 		UDPSize:   4096,
 	}
